@@ -2,8 +2,8 @@ package com.powermate.ai.domain.coach
 
 import com.powermate.ai.domain.model.BatterySnapshot
 import com.powermate.ai.domain.model.ChargingStatus
-import kotlin.test.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ChargingCoachTest {
     @Test
