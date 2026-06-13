@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.powermate.ai"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.powermate.ai"
