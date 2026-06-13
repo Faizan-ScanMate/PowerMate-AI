@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powermate.ai.aod.AodDisplayActivity
 import com.powermate.ai.domain.competitive.FeatureAvailability
+import com.powermate.ai.domain.model.AppUsageEntry
 import com.powermate.ai.domain.model.ChargingSession
 import com.powermate.ai.domain.model.ChargingStatus
 import com.powermate.ai.domain.model.DiagnosticResult
@@ -75,6 +76,7 @@ private enum class Tab(val label: String) {
     Live("Live"),
     Aod("AOD"),
     History("History"),
+    Usage("Usage"),
     Settings("Settings")
 }
 
@@ -98,7 +100,7 @@ fun PowerMateRoot(controller: PowerMateViewModel) {
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab },
                         icon = { NavGlyph(tab = tab, selected = selectedTab == tab) },
-                        label = { Text(tab.label) }
+                        label = { Text(tab.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                     )
                 }
             }
@@ -109,6 +111,7 @@ fun PowerMateRoot(controller: PowerMateViewModel) {
             Tab.Live -> LiveChargingScreen(controller, padding)
             Tab.Aod -> AodCustomizationScreen(controller, padding)
             Tab.History -> ChargingHistoryScreen(controller, padding)
+            Tab.Usage -> AppUsageAndWidgetsScreen(controller, padding)
             Tab.Settings -> SettingsScreen(controller, padding)
         }
     }
@@ -188,6 +191,8 @@ private fun HomeScreen(controller: PowerMateViewModel, padding: PaddingValues) {
             }
         }
 
+        item { ChargingIntelligenceDashboard(controller) }
+
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -234,6 +239,69 @@ private fun HomeScreen(controller: PowerMateViewModel, padding: PaddingValues) {
         item { BatteryHealthInsightCard(controller) }
         item { ChargingCoachCard(controller) }
         item { CompetitiveAdvantageCard(controller) }
+    }
+}
+
+
+@Composable
+private fun ChargingIntelligenceDashboard(controller: PowerMateViewModel) {
+    val snapshot = controller.snapshot
+    val latest = controller.latestDiagnostic
+    val best = controller.sessions.maxByOrNull { it.chargerScore ?: -1 }
+    val chargerScore = latest?.chargerScore ?: best?.chargerScore ?: controller.insights.chargingHealthScore
+    val cableScore = latest?.cableScore ?: best?.cableScore ?: estimateCableScore(snapshot)
+    val stabilityScore = latest?.stabilityScore ?: best?.stabilityScore ?: estimateStabilityScore(snapshot)
+    val peakCurrent = latest?.peakCurrentMa ?: best?.peakCurrentMa ?: snapshot.currentMilliAmp
+    val averageCurrent = latest?.averageCurrentMa ?: best?.averageCurrentMa ?: snapshot.averageCurrentMilliAmp ?: snapshot.currentMilliAmp
+    val peakWattage = latest?.peakWattage ?: best?.peakWattage ?: snapshot.wattage
+    val averageWattage = latest?.averageWattage ?: best?.averageWattage ?: snapshot.wattage
+    val recommendation = latest?.recommendation ?: buildLiveRecommendation(snapshot, chargerScore, cableScore, stabilityScore)
+
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Charging Intelligence", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Charger, cable, speed and thermal quality — estimated locally", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip("Free", SuccessGreen)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DiagnosticMetric("Charger", "$chargerScore/100", scoreColor(chargerScore), Modifier.weight(1f))
+            DiagnosticMetric("Cable", "$cableScore/100", scoreColor(cableScore), Modifier.weight(1f))
+            DiagnosticMetric("Stability", "$stabilityScore/100", scoreColor(stabilityScore), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DiagnosticMetric("Peak current", peakCurrent?.format0("mA") ?: "--", Cyan, Modifier.weight(1f))
+            DiagnosticMetric("Avg current", averageCurrent?.format0("mA") ?: "--", SoftPrimary, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DiagnosticMetric("Peak watts", peakWattage?.format1("W") ?: "--", SuccessGreen, Modifier.weight(1f))
+            DiagnosticMetric("Avg watts", averageWattage?.format1("W") ?: "--", WarningAmber, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DiagnosticMetric("Temperature", snapshot.temperatureCelsius?.format1("°C") ?: "--", riskColor(controller.insights.thermalRiskLabel), Modifier.weight(1f))
+            DiagnosticMetric("Temp trend", temperatureTrendLabel(snapshot.temperatureCelsius, controller.sessions), riskColor(controller.insights.thermalRiskLabel), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("Recommendation", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(recommendation, color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
@@ -375,6 +443,8 @@ private fun LiveChargingScreen(controller: PowerMateViewModel, padding: PaddingV
                 MiniGraph(values = listOf(20f, 45f, 52f, 48f, 65f, 70f, 62f, 80f, 76f, 84f))
             }
         }
+
+        item { ChargingIntelligenceDashboard(controller) }
 
         item {
             Row(
@@ -776,6 +846,13 @@ private fun ChargingHistoryScreen(controller: PowerMateViewModel, padding: Paddi
                 }
             }
         } else {
+            item {
+                SectionCard {
+                    Text("Session timeline", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Recent plug-in and charger diagnostics with local-only scores.", color = TextSecondary, fontSize = 13.sp)
+                }
+            }
             items(controller.sessions) { session ->
                 SessionRow(session)
             }
@@ -799,6 +876,7 @@ private fun SessionRow(session: ChargingSession) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(formatTime(session.startTime), color = TextSecondary, fontSize = 12.sp)
+                Text(sessionSummaryLine(session), color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             Spacer(Modifier.width(10.dp))
@@ -827,6 +905,187 @@ private fun SessionRow(session: ChargingSession) {
                 modifier = Modifier.weight(1f)
             )
         }
+    }
+}
+
+
+@Composable
+private fun AppUsageAndWidgetsScreen(controller: PowerMateViewModel, padding: PaddingValues) {
+    val context = LocalContext.current
+
+    ScreenShell("Usage & Widgets", "Local app usage clues and free home-screen widgets", padding) {
+        item {
+            SectionCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("App usage insights", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Top foreground apps from Android Usage Access", color = TextSecondary, fontSize = 12.sp)
+                    }
+                    StatusChip(if (controller.hasUsageStatsAccess) "Active" else "Permission", if (controller.hasUsageStatsAccess) SuccessGreen else WarningAmber)
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                if (!controller.hasUsageStatsAccess) {
+                    Text(
+                        "Grant Usage Access to show battery-drain clues by app. PowerMate only reads local Android usage stats and does not upload anything.",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PrimaryAction(
+                        "Open Usage Access Settings",
+                        { openOptimizationShortcut(context, OptimizationActionType.UsageAccessSettings) },
+                        Modifier.fillMaxWidth()
+                    )
+                } else if (controller.appUsageEntries.isEmpty()) {
+                    Text(
+                        "Usage access is enabled, but Android has not reported enough app activity yet. Use your phone for a while and check again.",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    TextButton(onClick = controller::refreshAppUsageNow) {
+                        Text("Refresh usage", color = Cyan, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    val total = controller.appUsageEntries.sumOf { it.foregroundTimeMs }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        DiagnosticMetric("Tracked time", formatDurationMs(total), Cyan, Modifier.weight(1f))
+                        DiagnosticMetric("Apps", controller.appUsageEntries.size.toString(), SoftPrimary, Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    TextButton(onClick = controller::refreshAppUsageNow) {
+                        Text("Refresh usage", color = Cyan, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (controller.appUsageEntries.isNotEmpty()) {
+            item {
+                SectionCard {
+                    Text("Top app usage today", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    controller.appUsageEntries.forEachIndexed { index, entry ->
+                        if (index > 0) Spacer(Modifier.height(10.dp))
+                        AppUsageRow(entry)
+                    }
+                }
+            }
+        }
+
+        item { WidgetCatalogSection(controller) }
+
+        item {
+            SectionCard {
+                Text("Local-only privacy", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "App usage, charging history, widget data and AOD preferences stay on this device. No Firebase, login, analytics SDK or cloud backend is used.",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUsageRow(entry: AppUsageEntry) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CardElevated.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                entry.appName.firstOrNull()?.uppercaseChar()?.toString() ?: "•",
+                color = Cyan,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(entry.appName, color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(formatDurationMs(entry.foregroundTimeMs), color = TextSecondary, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        StatusChip("${String.format(Locale.US, "%.1f", entry.percentOfTrackedUsage)}%", SoftPrimary)
+    }
+}
+
+@Composable
+private fun WidgetCatalogSection(controller: PowerMateViewModel) {
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Free widgets", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Home-screen tools included with no Pro locks", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip("4 widgets", SuccessGreen)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            WidgetPreviewCard("Battery Quick", "2×1", "${controller.snapshot.levelPercent}%", controller.snapshot.status.label, Cyan, Modifier.weight(1f))
+            WidgetPreviewCard("Charging Speed", "2×1", controller.snapshot.wattage?.format1("W") ?: "-- W", controller.snapshot.currentMilliAmp?.format0("mA") ?: "-- mA", SuccessGreen, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            WidgetPreviewCard("Battery Care", "2×2", "${controller.insights.batteryCareScore}/100", controller.insights.thermalRiskLabel, WarningAmber, Modifier.weight(1f))
+            WidgetPreviewCard("AOD Launch", "1×1", "AOD", "Open display", PrimaryBlue, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Add them from Android home screen: long-press home screen → Widgets → PowerMate AI.",
+            color = TextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+    }
+}
+
+@Composable
+private fun WidgetPreviewCard(
+    title: String,
+    size: String,
+    value: String,
+    subtitle: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 132.dp)
+            .background(CardElevated.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(size, color = TextSecondary, fontSize = 11.sp, maxLines = 1)
+        }
+        Text(value, color = accent, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -967,6 +1226,9 @@ private fun SettingsScreen(controller: PowerMateViewModel, padding: PaddingValue
                 SettingsShortcutRow("Display / brightness", "Open display settings") {
                     openOptimizationShortcut(context, OptimizationActionType.DisplaySettings)
                 }
+                SettingsShortcutRow("Usage access", "Allow local app-usage battery insights") {
+                    openOptimizationShortcut(context, OptimizationActionType.UsageAccessSettings)
+                }
             }
         }
 
@@ -1048,6 +1310,7 @@ private fun NavGlyph(tab: Tab, selected: Boolean) {
                 Tab.Live -> "⚡"
                 Tab.Aod -> "◐"
                 Tab.History -> "↻"
+                Tab.Usage -> "▦"
                 Tab.Settings -> "⚙"
             },
             color = textColor,
@@ -1101,6 +1364,16 @@ private fun DiagnosticResultCard(result: DiagnosticResult) {
         ) {
             DiagnosticMetric("Avg wattage", result.averageWattage?.format1("W") ?: "--", SuccessGreen, Modifier.weight(1f))
             DiagnosticMetric("Thermal", result.temperatureSafety, riskColor(result.temperatureSafety), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DiagnosticMetric("Avg current", result.averageCurrentMa?.format0("mA") ?: "--", Cyan, Modifier.weight(1f))
+            DiagnosticMetric("Peak watts", result.peakWattage?.format1("W") ?: "--", SuccessGreen, Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(14.dp))
@@ -1214,6 +1487,81 @@ private fun SettingsShortcutRow(title: String, subtitle: String, onClick: () -> 
     }
 }
 
+
+private fun estimateCableScore(snapshot: com.powermate.ai.domain.model.BatterySnapshot): Int {
+    if (!snapshot.isSensorReliable) return 58
+    val current = snapshot.currentMilliAmp ?: snapshot.averageCurrentMilliAmp ?: return 62
+    val wattage = snapshot.wattage ?: 0f
+    val base = when {
+        wattage >= 20f -> 92
+        wattage >= 12f -> 82
+        wattage >= 7f -> 72
+        wattage >= 4.5f -> 58
+        else -> 44
+    }
+    val currentBonus = when {
+        current >= 3000f -> 8
+        current >= 2000f -> 4
+        current < 700f -> -8
+        else -> 0
+    }
+    return (base + currentBonus).coerceIn(35, 100)
+}
+
+private fun estimateStabilityScore(snapshot: com.powermate.ai.domain.model.BatterySnapshot): Int = when {
+    !snapshot.isSensorReliable -> 58
+    snapshot.status == ChargingStatus.UnstableCharging -> 42
+    snapshot.status == ChargingStatus.SlowCharging -> 62
+    snapshot.status == ChargingStatus.FastCharging || snapshot.status == ChargingStatus.VeryFastCharging -> 84
+    snapshot.isCharging -> 76
+    else -> 68
+}
+
+private fun scoreColor(score: Int): Color = when {
+    score >= 82 -> SuccessGreen
+    score >= 64 -> Cyan
+    score >= 48 -> WarningAmber
+    else -> DangerRed
+}
+
+private fun buildLiveRecommendation(
+    snapshot: com.powermate.ai.domain.model.BatterySnapshot,
+    chargerScore: Int,
+    cableScore: Int,
+    stabilityScore: Int
+): String = when {
+    !snapshot.isSensorReliable -> "This phone limits current sensor precision. Compare chargers on the same phone and trust relative scores, not fake hardware claims."
+    (snapshot.temperatureCelsius ?: 0f) >= 42f -> "Temperature is high. Remove the case, stop heavy apps and avoid fast charging until it cools."
+    chargerScore >= 85 && cableScore >= 80 && stabilityScore >= 80 -> "Charging setup looks strong. Keep daily charging near 20–85% for battery care."
+    cableScore < 55 -> "Cable may be limiting current. Try a better cable and run a 60-second diagnostic again."
+    chargerScore < 55 -> "Charger output looks weak or unstable. Try a wall adapter with higher reliable output."
+    stabilityScore < 55 -> "Power is fluctuating. Check the port, cable connection and avoid moving the phone while testing."
+    else -> "Charging looks usable. Run a diagnostic on each charger to build a reliable local comparison history."
+}
+
+private fun temperatureTrendLabel(currentTemp: Float?, sessions: List<ChargingSession>): String {
+    val previousMax = sessions.mapNotNull { it.maxTemperatureC }.maxOrNull()
+    return when {
+        currentTemp == null -> "Unknown"
+        previousMax == null -> "Live only"
+        currentTemp > previousMax + 1.5f -> "Warming"
+        currentTemp < previousMax - 2f -> "Cooler"
+        else -> "Stable"
+    }
+}
+
+private fun formatDurationMs(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m ${seconds}s"
+        else -> "${seconds}s"
+    }
+}
+
 private fun riskColor(label: String): Color = when {
     label.contains("safe", ignoreCase = true) -> SuccessGreen
     label.contains("warm", ignoreCase = true) -> WarningAmber
@@ -1229,6 +1577,12 @@ private fun Float.format1(unit: String): String =
 
 private fun Float.format2(unit: String): String =
     "${String.format(Locale.US, "%.2f", this)} $unit"
+
+private fun sessionSummaryLine(session: ChargingSession): String {
+    val end = session.endBatteryPercent?.let { " → $it%" } ?: ""
+    val duration = session.endTime?.let { formatDurationMs(it - session.startTime) } ?: "running"
+    return "${session.startBatteryPercent}%$end • $duration • ${session.pluggedType.label}"
+}
 
 private fun formatTime(time: Long): String =
     SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(time))

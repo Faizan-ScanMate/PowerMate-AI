@@ -6,12 +6,14 @@ import androidx.compose.runtime.setValue
 import com.powermate.ai.data.battery.BatteryStatsManager
 import com.powermate.ai.data.preferences.PowerMatePreferences
 import com.powermate.ai.data.repository.ChargingSessionRepository
+import com.powermate.ai.data.usage.AppUsageStatsManager
 import com.powermate.ai.domain.coach.ChargingCoach
 import com.powermate.ai.domain.competitive.CompetitiveFeature
 import com.powermate.ai.domain.competitive.CompetitiveFeatureRegistry
 import com.powermate.ai.domain.insights.AdvancedBatteryInsights
 import com.powermate.ai.domain.insights.BatteryInsightsEngine
 import com.powermate.ai.domain.model.AppSettings
+import com.powermate.ai.domain.model.AppUsageEntry
 import com.powermate.ai.domain.model.BatterySnapshot
 import com.powermate.ai.domain.model.ChargingSession
 import com.powermate.ai.domain.model.DiagnosticResult
@@ -20,7 +22,8 @@ import com.powermate.ai.domain.model.OptimizationSuggestion
 class PowerMateViewModel(
     private val batteryStatsManager: BatteryStatsManager,
     private val repository: ChargingSessionRepository,
-    private val preferences: PowerMatePreferences
+    private val preferences: PowerMatePreferences,
+    private val appUsageStatsManager: AppUsageStatsManager
 ) {
     private val chargingCoach = ChargingCoach()
     private val insightsEngine = BatteryInsightsEngine()
@@ -41,13 +44,19 @@ class PowerMateViewModel(
         private set
     var chargingSuggestions by mutableStateOf<List<OptimizationSuggestion>>(emptyList())
         private set
+    var appUsageEntries by mutableStateOf<List<AppUsageEntry>>(emptyList())
+        private set
+    var hasUsageStatsAccess by mutableStateOf(false)
+        private set
     val competitiveFeatures: List<CompetitiveFeature> = CompetitiveFeatureRegistry.all()
+    private var lastUsageRefreshAt = 0L
 
     fun refresh() {
         snapshot = batteryStatsManager.currentSnapshot()
         sessions = repository.recentSessions()
         insights = insightsEngine.build(snapshot, sessions)
         chargingSuggestions = chargingCoach.suggest(snapshot)
+        refreshAppUsageIfNeeded()
         if (isDiagnosticRunning) {
             diagnosticSeconds += 1
             repository.addDiagnosticReading(snapshot)
@@ -78,5 +87,22 @@ class PowerMateViewModel(
         repository.clearHistory()
         sessions = repository.recentSessions()
         insights = insightsEngine.build(snapshot, sessions)
+    }
+
+    fun refreshAppUsageNow() {
+        hasUsageStatsAccess = appUsageStatsManager.hasUsageAccess()
+        appUsageEntries = if (hasUsageStatsAccess) {
+            appUsageStatsManager.topAppsSince(hours = 24, limit = 8)
+        } else {
+            emptyList()
+        }
+        lastUsageRefreshAt = System.currentTimeMillis()
+    }
+
+    private fun refreshAppUsageIfNeeded() {
+        val now = System.currentTimeMillis()
+        if (now - lastUsageRefreshAt >= 30_000L) {
+            refreshAppUsageNow()
+        }
     }
 }
