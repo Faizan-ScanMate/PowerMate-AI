@@ -8,6 +8,7 @@ enum class OptimizationActionType {
     DisplaySettings,
     BatterySaverSettings,
     NfcSettings,
+    UsageAccessSettings,
     None
 }
 
