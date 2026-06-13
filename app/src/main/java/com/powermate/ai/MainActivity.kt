@@ -10,6 +10,7 @@ import com.powermate.ai.data.battery.BatteryStatsManager
 import com.powermate.ai.data.local.PowerMateDatabase
 import com.powermate.ai.data.preferences.PowerMatePreferences
 import com.powermate.ai.data.repository.ChargingSessionRepository
+import com.powermate.ai.data.usage.AppUsageStatsManager
 import com.powermate.ai.ui.PowerMateRoot
 import com.powermate.ai.ui.PowerMateViewModel
 import com.powermate.ai.ui.theme.PowerMateTheme
@@ -28,7 +29,8 @@ class MainActivity : ComponentActivity() {
         val controller = PowerMateViewModel(
             batteryStatsManager = BatteryStatsManager(this),
             repository = ChargingSessionRepository(database),
-            preferences = PowerMatePreferences(this)
+            preferences = PowerMatePreferences(this),
+            appUsageStatsManager = AppUsageStatsManager(this)
         )
 
         setContent {
