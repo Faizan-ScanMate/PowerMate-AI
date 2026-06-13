@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PowerMate AI</string>
+    <string name="battery_widget_name">PowerMate Battery</string>
+    <string name="battery_widget_desc">Shows battery level and charging status.</string>
+</resources>
