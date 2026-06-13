@@ -39,10 +39,13 @@ jobs:
         with:
           gradle-version: 9.4.1
 
-      - name: Decode release keystore if secrets exist
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      - name: Verify project structure
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release-keystore.jks
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          ls -la
+          echo "✅ Project structure OK"
 
       - name: Run unit tests
         run: gradle testDebugUnitTest --no-daemon --stacktrace
@@ -50,21 +53,27 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Build signed release APK
+      - name: Build release APK and AAB
         env:
-          KEYSTORE_FILE: ${{ github.workspace }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
 
-      - name: Build signed release AAB
-        env:
-          KEYSTORE_FILE: ${{ github.workspace }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle :app:bundleRelease --no-daemon --stacktrace
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$RELEASE_KEYSTORE_PASSWORD" ] && [ -n "$RELEASE_KEY_ALIAS" ] && [ -n "$RELEASE_KEY_PASSWORD" ]; then
+            echo "🔐 Signing secrets found. Building signed release."
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
+            export KEYSTORE_FILE="$GITHUB_WORKSPACE/release-keystore.jks"
+            export KEYSTORE_PASSWORD="$RELEASE_KEYSTORE_PASSWORD"
+            export KEY_ALIAS="$RELEASE_KEY_ALIAS"
+            export KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+          else
+            echo "⚠️ Signing secrets not found. Building release with fallback debug signing for CI only."
+          fi
+
+          gradle :app:assembleRelease :app:bundleRelease --no-daemon --stacktrace
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
