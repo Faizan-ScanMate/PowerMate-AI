@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.powermate.ai"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.powermate.ai"
@@ -58,7 +58,7 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 
     val composeBom = platform("androidx.compose:compose-bom:2026.05.00")
