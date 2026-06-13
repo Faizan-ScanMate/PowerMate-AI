@@ -20,7 +20,7 @@ fun openOptimizationShortcut(context: Context, actionType: OptimizationActionTyp
         OptimizationActionType.BluetoothSettings -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
         OptimizationActionType.LocationSettings -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
         OptimizationActionType.DisplaySettings -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
-        OptimizationActionType.BatterySaverSettings -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+        OptimizationActionType.BatterySaverSettings -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         OptimizationActionType.NfcSettings -> Intent(Settings.ACTION_NFC_SETTINGS)
         OptimizationActionType.None -> return
     }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

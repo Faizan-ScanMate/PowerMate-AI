@@ -3,16 +3,20 @@ package com.powermate.ai.ui
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -33,12 +37,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powermate.ai.aod.AodDisplayActivity
 import com.powermate.ai.domain.competitive.FeatureAvailability
 import com.powermate.ai.domain.model.ChargingSession
 import com.powermate.ai.domain.model.ChargingStatus
+import com.powermate.ai.domain.model.DiagnosticResult
 import com.powermate.ai.domain.model.OptimizationActionType
 import com.powermate.ai.domain.model.OptimizationImpact
 import com.powermate.ai.domain.model.OptimizationSuggestion
@@ -46,11 +52,11 @@ import com.powermate.ai.ui.components.BatteryRing
 import com.powermate.ai.ui.components.MetricCard
 import com.powermate.ai.ui.components.MiniGraph
 import com.powermate.ai.ui.components.PrimaryAction
-import com.powermate.ai.ui.components.ScoreGauge
 import com.powermate.ai.ui.components.SectionCard
 import com.powermate.ai.ui.components.SettingToggle
 import com.powermate.ai.ui.components.StatusChip
 import com.powermate.ai.ui.theme.AmoledBlack
+import com.powermate.ai.ui.theme.CardElevated
 import com.powermate.ai.ui.theme.Cyan
 import com.powermate.ai.ui.theme.DangerRed
 import com.powermate.ai.ui.theme.PrimaryBlue
@@ -91,7 +97,7 @@ fun PowerMateRoot(controller: PowerMateViewModel) {
                     NavigationBarItem(
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab },
-                        icon = { Text(tab.label.take(1), fontWeight = FontWeight.Bold) },
+                        icon = { NavGlyph(tab = tab, selected = selectedTab == tab) },
                         label = { Text(tab.label) }
                     )
                 }
@@ -234,28 +240,42 @@ private fun HomeScreen(controller: PowerMateViewModel, padding: PaddingValues) {
 @Composable
 private fun BatteryHealthInsightCard(controller: PowerMateViewModel) {
     val insights = controller.insights
+    val snapshot = controller.snapshot
+    val runtimeEstimate = snapshot.timeToFullMinutes?.let { "Full in ${formatMinutes(it)}" }
+        ?: snapshot.timeToEmptyMinutes?.let { "Runtime ${formatMinutes(it)}" }
+        ?: "Needs supported sensor"
 
     SectionCard {
-        Text(insights.headline, color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(insights.headline, color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Battery health, heat and runtime signals", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip(insights.thermalRiskLabel, riskColor(insights.thermalRiskLabel))
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             MetricCard(
-                "Charge health",
-                "${insights.chargingHealthScore}/100",
-                insights.thermalRiskLabel,
-                Modifier.weight(1f),
-                SuccessGreen
-            )
-            MetricCard(
-                "Battery care",
+                "Care score",
                 "${insights.batteryCareScore}/100",
                 insights.wearLevelLabel,
                 Modifier.weight(1f),
                 Cyan
+            )
+            MetricCard(
+                "Temp risk",
+                insights.thermalRiskLabel,
+                snapshot.temperatureCelsius?.format1("°C") ?: "Unknown",
+                Modifier.weight(1f),
+                riskColor(insights.thermalRiskLabel)
             )
         }
 
@@ -273,20 +293,29 @@ private fun BatteryHealthInsightCard(controller: PowerMateViewModel) {
                 SoftPrimary
             )
             MetricCard(
-                "Time",
-                controller.snapshot.timeToFullMinutes?.let { formatMinutes(it) }
-                    ?: controller.snapshot.timeToEmptyMinutes?.let { formatMinutes(it) }
-                    ?: "--",
-                "Estimate",
+                "Runtime",
+                runtimeEstimate,
+                "Live estimate",
                 Modifier.weight(1f),
                 WarningAmber
             )
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
+        Text("Safe charging tips", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
 
-        insights.details.take(3).forEach {
-            Text("• $it", color = TextSecondary, fontSize = 12.sp)
+        val careTips = listOf(
+            "Keep daily charging near 20–85% when possible.",
+            "Avoid thick cases or gaming while the phone is hot.",
+            "Use the same phone when comparing chargers for fair results."
+        )
+        careTips.forEach { tip ->
+            Text("• $tip", color = TextSecondary, fontSize = 12.sp)
+        }
+
+        insights.details.take(2).forEach { detail ->
+            Text("• $detail", color = TextSecondary, fontSize = 12.sp)
         }
     }
 }
@@ -431,24 +460,7 @@ private fun LiveChargingScreen(controller: PowerMateViewModel, padding: PaddingV
         item { ChargingCoachCard(controller) }
 
         controller.latestDiagnostic?.let { result ->
-            item {
-                SectionCard {
-                    Text("Latest diagnostic", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(10.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        ScoreGauge("Charger", result.chargerScore, Modifier.weight(1f))
-                        ScoreGauge("Cable", result.cableScore, Modifier.weight(1f))
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(result.recommendation, color = TextSecondary, fontSize = 14.sp)
-                }
-            }
+            item { DiagnosticResultCard(result) }
         }
     }
 }
@@ -464,7 +476,7 @@ private fun ChargingCoachCard(controller: PowerMateViewModel) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Smart Charging Coach", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Actionable tips + safe Android shortcuts", color = TextSecondary, fontSize = 12.sp)
+                Text("Responsive tips + safe Android settings shortcuts", color = TextSecondary, fontSize = 12.sp)
             }
             StatusChip("Free", SuccessGreen)
         }
@@ -492,50 +504,72 @@ private fun SuggestionRow(
     onRunDiagnostic: () -> Unit
 ) {
     val context = LocalContext.current
+    val hasAction = suggestion.actionType != OptimizationActionType.None || suggestion.actionLabel == "Run test"
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CardElevated.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+            .padding(14.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    suggestion.title,
-                    color = TextMain,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                StatusChip(suggestion.impact.label, impactColor(suggestion.impact))
-            }
+        Text(
+            suggestion.title,
+            color = TextMain,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
 
-            Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(8.dp))
 
-            Text(suggestion.reason, color = TextSecondary, fontSize = 12.sp)
-        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            StatusChip(
+                suggestion.impact.label,
+                impactColor(suggestion.impact),
+                modifier = Modifier.widthIn(min = 74.dp, max = 132.dp)
+            )
 
-        if (suggestion.actionType != OptimizationActionType.None || suggestion.actionLabel == "Run test") {
-            Spacer(Modifier.width(8.dp))
-
-            TextButton(
-                onClick = {
-                    if (suggestion.actionLabel == "Run test") {
-                        onRunDiagnostic()
-                    } else {
-                        openOptimizationShortcut(context, suggestion.actionType)
+            if (hasAction) {
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 0.dp)
+                        .heightIn(min = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    onClick = {
+                        if (suggestion.actionLabel == "Run test") {
+                            onRunDiagnostic()
+                        } else {
+                            openOptimizationShortcut(context, suggestion.actionType)
+                        }
                     }
+                ) {
+                    Text(
+                        suggestion.actionLabel,
+                        color = Cyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            ) {
-                Text(
-                    suggestion.actionLabel,
-                    color = Cyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            suggestion.reason,
+            color = TextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
     }
 }
 
@@ -584,12 +618,23 @@ private fun AodCustomizationScreen(controller: PowerMateViewModel, padding: Padd
         }
 
         item {
+            AodStylePreviewSection(controller)
+        }
+
+        item {
             SectionCard {
-                Text("Included styles", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Display safety", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Pixel Clean • Minimal Neon • Ring Meter • Cyber Pulse • Classic Clock • Ultra Minimal • Speed Glow • Text Only",
-                    color = TextSecondary
+                    "Burn-in protection gently shifts the clock and ring so OLED pixels are not stressed in one fixed place.",
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Night dim lowers the AOD look at night for comfort and battery care while staying fully local.",
+                    color = TextSecondary,
+                    fontSize = 13.sp
                 )
             }
         }
@@ -697,6 +742,20 @@ private fun ChargingHistoryScreen(controller: PowerMateViewModel, padding: Paddi
             }
         }
 
+        item { BestChargerSummaryCard(controller) }
+
+        item {
+            SectionCard {
+                Text("Local-only history", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Charging sessions, charger scores and diagnostic notes stay on this device. No login, Firebase or cloud sync is used.",
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
         controller.insights.slowestChargerWarning?.let { warning ->
             item {
                 SectionCard {
@@ -731,11 +790,18 @@ private fun SessionRow(session: ChargingSession) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text(session.userLabel ?: "Charging session", color = TextMain, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    session.userLabel ?: "Charging session",
+                    color = TextMain,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(formatTime(session.startTime), color = TextSecondary, fontSize = 12.sp)
             }
 
+            Spacer(Modifier.width(10.dp))
             StatusChip("${session.chargerScore ?: 0}/100", SuccessGreen)
         }
 
@@ -766,6 +832,8 @@ private fun SessionRow(session: ChargingSession) {
 
 @Composable
 private fun SettingsScreen(controller: PowerMateViewModel, padding: PaddingValues) {
+    val context = LocalContext.current
+
     ScreenShell("Settings", "No login, no cloud, all tools included", padding) {
         item {
             SectionCard {
@@ -847,11 +915,66 @@ private fun SettingsScreen(controller: PowerMateViewModel, padding: PaddingValue
             }
         }
 
+        item {
+            SectionCard {
+                Text("AOD settings", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text("AOD stays device-only and uses lightweight previews, burn-in protection and night dim.", color = TextSecondary, fontSize = 12.sp)
+
+                SettingToggle(
+                    "AOD enabled",
+                    "Show charging display while plugged in",
+                    controller.settings.aodEnabled
+                ) { checked ->
+                    controller.updateSettings { it.copy(aodEnabled = checked) }
+                }
+
+                SettingToggle(
+                    "Burn-in protection",
+                    "Shift elements to protect OLED screens",
+                    controller.settings.burnInProtection
+                ) { checked ->
+                    controller.updateSettings { it.copy(burnInProtection = checked) }
+                }
+
+                SettingToggle(
+                    "Night dim",
+                    "Dim the charging display at night",
+                    controller.settings.nightDimMode
+                ) { checked ->
+                    controller.updateSettings { it.copy(nightDimMode = checked) }
+                }
+            }
+        }
+
+        item {
+            SectionCard {
+                Text("Safe Android shortcuts", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "PowerMate only opens Android settings panels. It never silently toggles Bluetooth, display or battery features.",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(8.dp))
+
+                SettingsShortcutRow("Bluetooth", "Open Bluetooth settings") {
+                    openOptimizationShortcut(context, OptimizationActionType.BluetoothSettings)
+                }
+                SettingsShortcutRow("Battery optimization", "Open battery optimization settings") {
+                    openOptimizationShortcut(context, OptimizationActionType.BatterySaverSettings)
+                }
+                SettingsShortcutRow("Display / brightness", "Open display settings") {
+                    openOptimizationShortcut(context, OptimizationActionType.DisplaySettings)
+                }
+            }
+        }
+
         item { FeatureMatrixCard(controller) }
 
         item {
             SectionCard {
-                Text("Privacy", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Privacy & local data", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "PowerMate AI is offline-first. No account is required. Charging history is stored locally and can be cleared anytime.",
@@ -906,6 +1029,197 @@ private fun FeatureMatrixCard(controller: PowerMateViewModel) {
             }
         }
     }
+}
+
+@Composable
+private fun NavGlyph(tab: Tab, selected: Boolean) {
+    val background = if (selected) PrimaryBlue.copy(alpha = 0.95f) else CardElevated
+    val textColor = if (selected) TextMain else TextSecondary
+
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .background(background, RoundedCornerShape(11.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = when (tab) {
+                Tab.Home -> "⌂"
+                Tab.Live -> "⚡"
+                Tab.Aod -> "◐"
+                Tab.History -> "↻"
+                Tab.Settings -> "⚙"
+            },
+            color = textColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+@Composable
+private fun DiagnosticResultCard(result: DiagnosticResult) {
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Charging diagnostic", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Charger, cable and current stability result", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip("${result.chargerScore}/100", SuccessGreen)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DiagnosticMetric("Charger score", "${result.chargerScore}/100", SuccessGreen, Modifier.weight(1f))
+            DiagnosticMetric("Cable score", "${result.cableScore}/100", Cyan, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DiagnosticMetric("Stability", "${result.stabilityScore}/100", SoftPrimary, Modifier.weight(1f))
+            DiagnosticMetric("Peak current", result.peakCurrentMa?.format0("mA") ?: "--", WarningAmber, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DiagnosticMetric("Avg wattage", result.averageWattage?.format1("W") ?: "--", SuccessGreen, Modifier.weight(1f))
+            DiagnosticMetric("Thermal", result.temperatureSafety, riskColor(result.temperatureSafety), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("Recommendation", color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(result.recommendation, color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+    }
+}
+
+@Composable
+private fun DiagnosticMetric(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(CardElevated.copy(alpha = 0.62f), RoundedCornerShape(18.dp))
+            .padding(12.dp)
+            .heightIn(min = 62.dp)
+    ) {
+        Text(label, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        Text(value, color = accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun AodStylePreviewSection(controller: PowerMateViewModel) {
+    SectionCard {
+        Text("Style previews", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text("Minimal, Neon, Ring and Text layouts are lightweight and work without cloud features.", color = TextSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            AodStylePreviewCard("Minimal", "22:45", "Clean clock", Cyan, Modifier.weight(1f))
+            AodStylePreviewCard("Neon", "${controller.snapshot.levelPercent}%", "Glow look", PrimaryBlue, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            AodStylePreviewCard("Ring", "◌", "Battery ring", SuccessGreen, Modifier.weight(1f))
+            AodStylePreviewCard("Text", controller.snapshot.wattage?.format1("W") ?: "-- W", "Simple stats", WarningAmber, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun AodStylePreviewCard(title: String, sample: String, subtitle: String, accent: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 108.dp)
+            .background(Color.Black, RoundedCornerShape(20.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(sample, color = accent, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun BestChargerSummaryCard(controller: PowerMateViewModel) {
+    val best = controller.sessions.maxByOrNull { it.chargerScore ?: -1 }
+
+    SectionCard {
+        Text("Best charger summary", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+
+        if (best == null) {
+            Text("Run a diagnostic to compare chargers and cables locally.", color = TextSecondary, fontSize = 13.sp)
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(best.userLabel ?: "Top charger", color = TextMain, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "Avg ${best.averageWattage?.format1("W") ?: "--"} • Peak ${best.peakCurrentMa?.format0("mA") ?: "--"}",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                StatusChip("${best.chargerScore ?: 0}/100", SuccessGreen)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsShortcutRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextSecondary, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(8.dp))
+        TextButton(
+            modifier = Modifier.defaultMinSize(minWidth = 0.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            onClick = onClick
+        ) {
+            Text("Open", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
+private fun riskColor(label: String): Color = when {
+    label.contains("safe", ignoreCase = true) -> SuccessGreen
+    label.contains("warm", ignoreCase = true) -> WarningAmber
+    label.contains("hot", ignoreCase = true) -> DangerRed
+    label.contains("too", ignoreCase = true) -> DangerRed
+    else -> TextSecondary
 }
 
 private fun Float.format0(unit: String): String = "${toInt()} $unit"
