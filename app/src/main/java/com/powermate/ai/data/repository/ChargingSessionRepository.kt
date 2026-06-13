@@ -19,9 +19,10 @@ class ChargingSessionRepository(private val database: PowerMateDatabase) {
     }
 
     fun completeDiagnostic(): DiagnosticResult {
-        val result = DiagnosticScorer.score(diagnosticBuffer.toList())
+        val readings = diagnosticBuffer.toList()
+        val result = DiagnosticScorer.score(readings)
         database.insertDiagnostic(result)
-        saveSyntheticSession(result)
+        saveSyntheticSession(result, readings)
         diagnosticBuffer.clear()
         return result
     }
@@ -30,23 +31,26 @@ class ChargingSessionRepository(private val database: PowerMateDatabase) {
 
     fun clearHistory() = database.clearAll()
 
-    private fun saveSyntheticSession(result: DiagnosticResult) {
+    private fun saveSyntheticSession(result: DiagnosticResult, readings: List<BatterySnapshot>) {
+        val first = readings.firstOrNull()
+        val last = readings.lastOrNull()
+        val temps = readings.mapNotNull { it.temperatureCelsius }
         val session = ChargingSession(
             id = result.id,
-            startTime = result.timestamp - 60_000,
-            endTime = result.timestamp,
-            startBatteryPercent = 0,
-            endBatteryPercent = null,
+            startTime = first?.timestamp ?: (result.timestamp - 60_000),
+            endTime = last?.timestamp ?: result.timestamp,
+            startBatteryPercent = first?.levelPercent ?: 0,
+            endBatteryPercent = last?.levelPercent,
             averageCurrentMa = result.averageCurrentMa,
             peakCurrentMa = result.peakCurrentMa,
             averageWattage = result.averageWattage,
             peakWattage = result.peakWattage,
-            minTemperatureC = null,
-            maxTemperatureC = null,
+            minTemperatureC = temps.minOrNull(),
+            maxTemperatureC = temps.maxOrNull(),
             stabilityScore = result.stabilityScore,
             chargerScore = result.chargerScore,
             cableScore = result.cableScore,
-            pluggedType = com.powermate.ai.domain.model.PluggedType.Unknown,
+            pluggedType = last?.pluggedType ?: com.powermate.ai.domain.model.PluggedType.Unknown,
             userLabel = "Diagnostic ${result.chargerScore}/100"
         )
         database.insertSession(session)
