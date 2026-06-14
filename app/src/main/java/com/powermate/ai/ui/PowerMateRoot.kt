@@ -1,7 +1,10 @@
 package com.powermate.ai.ui
 
 import android.content.Intent
+import com.powermate.ai.R
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -33,9 +37,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,13 +79,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class Tab(val label: String) {
-    Home("Home"),
-    Live("Live"),
-    Aod("AOD"),
-    History("History"),
-    Usage("Usage"),
-    Settings("Settings")
+private enum class Tab(val label: String, val iconRes: Int) {
+    Home("Home", R.drawable.ic_pm_home),
+    Live("Live", R.drawable.ic_pm_live),
+    Looks("Looks", R.drawable.ic_pm_looks),
+    History("History", R.drawable.ic_pm_history),
+    Usage("Usage", R.drawable.ic_pm_usage),
+    Settings("Settings", R.drawable.ic_pm_settings)
 }
 
 @Composable
@@ -109,7 +117,7 @@ fun PowerMateRoot(controller: PowerMateViewModel) {
         when (selectedTab) {
             Tab.Home -> HomeScreen(controller, padding)
             Tab.Live -> LiveChargingScreen(controller, padding)
-            Tab.Aod -> AodCustomizationScreen(controller, padding)
+            Tab.Looks -> LooksScreen(controller, padding)
             Tab.History -> ChargingHistoryScreen(controller, padding)
             Tab.Usage -> AppUsageAndWidgetsScreen(controller, padding)
             Tab.Settings -> SettingsScreen(controller, padding)
@@ -444,6 +452,8 @@ private fun LiveChargingScreen(controller: PowerMateViewModel, padding: PaddingV
             }
         }
 
+        item { RealtimeBatteryLabCard(controller) }
+
         item { ChargingIntelligenceDashboard(controller) }
 
         item {
@@ -532,6 +542,74 @@ private fun LiveChargingScreen(controller: PowerMateViewModel, padding: PaddingV
         controller.latestDiagnostic?.let { result ->
             item { DiagnosticResultCard(result) }
         }
+    }
+}
+
+@Composable
+private fun RealtimeBatteryLabCard(controller: PowerMateViewModel) {
+    val snap = controller.snapshot
+    val currentSource = when {
+        snap.currentMilliAmp != null -> "Measured now"
+        snap.averageCurrentMilliAmp != null -> "Average sensor"
+        else -> "Unavailable"
+    }
+    val wattSource = when {
+        snap.wattage != null && snap.currentMilliAmp != null -> "Measured estimate"
+        snap.wattage != null -> "Average estimate"
+        else -> "Unavailable"
+    }
+
+    SectionCard {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Real-time charging lab", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Refreshes every second from Android battery sensors", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip(if (snap.isSensorReliable) "Live" else "Limited", if (snap.isSensorReliable) SuccessGreen else WarningAmber)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            SensorReadoutCard("Current", snap.currentMilliAmp?.format0("mA") ?: snap.averageCurrentMilliAmp?.format0("mA") ?: "--", currentSource, Cyan, Modifier.weight(1f))
+            SensorReadoutCard("Wattage", snap.wattage?.format1("W") ?: "--", wattSource, SuccessGreen, Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            SensorReadoutCard("Voltage", snap.voltageVolt?.format2("V") ?: "--", snap.pluggedType.label, SoftPrimary, Modifier.weight(1f))
+            SensorReadoutCard("Thermal", snap.temperatureCelsius?.format1("°C") ?: "--", temperatureTrendLabel(snap.temperatureCelsius, controller.sessions), riskColor(controller.insights.thermalRiskLabel), Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            sensorTruthNote(snap.isSensorReliable),
+            color = TextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+    }
+}
+
+@Composable
+private fun SensorReadoutCard(
+    label: String,
+    value: String,
+    source: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 88.dp)
+            .background(CardElevated.copy(alpha = 0.62f), RoundedCornerShape(20.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = accent, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(source, color = TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -644,10 +722,10 @@ private fun SuggestionRow(
 }
 
 @Composable
-private fun AodCustomizationScreen(controller: PowerMateViewModel, padding: PaddingValues) {
+private fun LooksScreen(controller: PowerMateViewModel, padding: PaddingValues) {
     val context = LocalContext.current
 
-    ScreenShell("AOD Display", "All charging display styles included", padding) {
+    ScreenShell("Looks", "AOD styles, themes and widgets without Pro locks", padding) {
         item {
             SectionCard {
                 Column(
@@ -687,9 +765,13 @@ private fun AodCustomizationScreen(controller: PowerMateViewModel, padding: Padd
             )
         }
 
+        item { LooksThemeGallery() }
+
         item {
             AodStylePreviewSection(controller)
         }
+
+        item { WidgetLookPreviewSection(controller) }
 
         item {
             SectionCard {
@@ -761,6 +843,79 @@ private fun AodCustomizationScreen(controller: PowerMateViewModel, padding: Padd
                     controller.updateSettings { it.copy(showAodCameraShortcut = checked) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LooksThemeGallery() {
+    SectionCard {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Looks studio", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Premium visual presets without heavy dependencies", color = TextSecondary, fontSize = 12.sp)
+            }
+            StatusChip("Free", SuccessGreen)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            LookPresetCard("Power Blue", "Clean default", PrimaryBlue, Cyan, Modifier.weight(1f))
+            LookPresetCard("Neon Pulse", "Charging glow", SuccessGreen, Cyan, Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            LookPresetCard("AMOLED Black", "Deep OLED", Color.Black, SoftPrimary, Modifier.weight(1f))
+            LookPresetCard("Clean Light", "Readable cards", Color(0xFFF5F8FF), PrimaryBlue, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun LookPresetCard(
+    title: String,
+    subtitle: String,
+    base: Color,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = 118.dp)
+            .background(CardElevated.copy(alpha = 0.72f), RoundedCornerShape(22.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(42.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Brush.linearGradient(listOf(base, accent.copy(alpha = 0.72f))))
+        )
+        Column {
+            Text(title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun WidgetLookPreviewSection(controller: PowerMateViewModel) {
+    SectionCard {
+        Text("Widget looks", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Preview battery, charging speed and care widgets before adding them from the Android home screen.",
+            color = TextSecondary,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            WidgetPreviewCard("Compact", "2×1", "${controller.snapshot.levelPercent}%", controller.snapshot.status.label, Cyan, Modifier.weight(1f))
+            WidgetPreviewCard("Lab", "2×1", controller.snapshot.wattage?.format1("W") ?: "-- W", controller.snapshot.currentMilliAmp?.format0("mA") ?: "-- mA", SuccessGreen, Modifier.weight(1f))
         }
     }
 }
@@ -912,8 +1067,12 @@ private fun SessionRow(session: ChargingSession) {
 @Composable
 private fun AppUsageAndWidgetsScreen(controller: PowerMateViewModel, padding: PaddingValues) {
     val context = LocalContext.current
+    val entries = controller.appUsageEntries
+    val total24h = entries.sumOf { it.last24hTimeMs }
+    val totalToday = entries.sumOf { it.todayTimeMs }
+    val topApp = entries.maxByOrNull { it.last24hTimeMs }
 
-    ScreenShell("Usage & Widgets", "Local app usage clues and free home-screen widgets", padding) {
+    ScreenShell("Usage", "Real app icons, screen-time clues and battery hints", padding) {
         item {
             SectionCard {
                 Row(
@@ -921,17 +1080,20 @@ private fun AppUsageAndWidgetsScreen(controller: PowerMateViewModel, padding: Pa
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("App usage insights", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("Top foreground apps from Android Usage Access", color = TextSecondary, fontSize = 12.sp)
+                        Text("App usage intelligence", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Uses Android Usage Access + installed app logos locally", color = TextSecondary, fontSize = 12.sp)
                     }
-                    StatusChip(if (controller.hasUsageStatsAccess) "Active" else "Permission", if (controller.hasUsageStatsAccess) SuccessGreen else WarningAmber)
+                    StatusChip(
+                        if (controller.hasUsageStatsAccess) "Live local" else "Permission",
+                        if (controller.hasUsageStatsAccess) SuccessGreen else WarningAmber
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
 
                 if (!controller.hasUsageStatsAccess) {
                     Text(
-                        "Grant Usage Access to show battery-drain clues by app. PowerMate only reads local Android usage stats and does not upload anything.",
+                        "Grant Usage Access to show real installed app names, logos, last-used time and foreground usage. Nothing is uploaded.",
                         color = TextSecondary,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -942,39 +1104,75 @@ private fun AppUsageAndWidgetsScreen(controller: PowerMateViewModel, padding: Pa
                         { openOptimizationShortcut(context, OptimizationActionType.UsageAccessSettings) },
                         Modifier.fillMaxWidth()
                     )
-                } else if (controller.appUsageEntries.isEmpty()) {
+                } else if (entries.isEmpty()) {
                     Text(
-                        "Usage access is enabled, but Android has not reported enough app activity yet. Use your phone for a while and check again.",
+                        "Permission is enabled, but Android has not reported enough app activity yet. Open a few apps, then refresh.",
                         color = TextSecondary,
-                        fontSize = 13.sp
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
                     )
                     Spacer(Modifier.height(10.dp))
                     TextButton(onClick = controller::refreshAppUsageNow) {
                         Text("Refresh usage", color = Cyan, fontWeight = FontWeight.Bold)
                     }
                 } else {
-                    val total = controller.appUsageEntries.sumOf { it.foregroundTimeMs }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        DiagnosticMetric("Tracked time", formatDurationMs(total), Cyan, Modifier.weight(1f))
-                        DiagnosticMetric("Apps", controller.appUsageEntries.size.toString(), SoftPrimary, Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        DiagnosticMetric("Today", formatDurationMs(totalToday), Cyan, Modifier.weight(1f))
+                        DiagnosticMetric("Last 24h", formatDurationMs(total24h), SuccessGreen, Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(10.dp))
-                    TextButton(onClick = controller::refreshAppUsageNow) {
-                        Text("Refresh usage", color = Cyan, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        DiagnosticMetric("Apps", entries.size.toString(), SoftPrimary, Modifier.weight(1f))
+                        DiagnosticMetric("Top app", topApp?.appName ?: "--", WarningAmber, Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Refreshes automatically while open. Usage stats can be delayed by Android on some devices.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = controller::refreshAppUsageNow) {
+                            Text("Refresh", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
-        if (controller.appUsageEntries.isNotEmpty()) {
+        if (entries.isNotEmpty()) {
             item {
                 SectionCard {
-                    Text("Top app usage today", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Top foreground apps", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    controller.appUsageEntries.forEachIndexed { index, entry ->
+                    Text(
+                        "Sorted by last 24h foreground time. Icons come from installed apps, not generated placeholders.",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    entries.forEachIndexed { index, entry ->
                         if (index > 0) Spacer(Modifier.height(10.dp))
                         AppUsageRow(entry)
                     }
+                }
+            }
+
+            item {
+                SectionCard {
+                    Text("Usage coach", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    val heaviest = topApp
+                    val message = when {
+                        heaviest == null -> "Usage data is still warming up."
+                        heaviest.last24hTimeMs >= 3 * 60L * 60L * 1000L -> "${heaviest.appName} is your heaviest foreground app. Long screen-on time usually affects battery more than background services."
+                        heaviest.categoryLabel == "Game" -> "Games can raise temperature and reduce charging speed. Avoid gaming during charger tests."
+                        else -> "Your tracked app usage looks moderate. Use charging tests with the screen off for cleaner charger results."
+                    }
+                    Text(message, color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
                 }
             }
         }
@@ -998,33 +1196,109 @@ private fun AppUsageAndWidgetsScreen(controller: PowerMateViewModel, padding: Pa
 
 @Composable
 private fun AppUsageRow(entry: AppUsageEntry) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(CardElevated.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(CardElevated.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+            .padding(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIconAvatar(entry)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(entry.appName, color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${entry.categoryLabel} • ${entry.drainHint}",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(6.dp))
+                UsageProgressBar(entry.percentOfTrackedUsage / 100f)
+            }
+            Spacer(Modifier.width(10.dp))
+            StatusChip("${String.format(Locale.US, "%.1f", entry.percentOfTrackedUsage)}%", SoftPrimary)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            UsageMiniStat("24h", formatDurationMs(entry.last24hTimeMs), Modifier.weight(1f))
+            UsageMiniStat("Today", formatDurationMs(entry.todayTimeMs), Modifier.weight(1f))
+            UsageMiniStat("Last", formatRelativeTime(entry.lastTimeUsed), Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun AppIconAvatar(entry: AppUsageEntry) {
+    Box(
+        modifier = Modifier
+            .size(50.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(PrimaryBlue.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center
+    ) {
+        val bitmap = entry.iconBitmap
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = entry.appName,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(PrimaryBlue, Cyan))),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    entry.appName.firstOrNull()?.uppercaseChar()?.toString() ?: "•",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageProgressBar(progress: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(SoftPrimary.copy(alpha = 0.15f))
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .background(PrimaryBlue.copy(alpha = 0.18f), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                entry.appName.firstOrNull()?.uppercaseChar()?.toString() ?: "•",
-                color = Cyan,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(entry.appName, color = TextMain, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(formatDurationMs(entry.foregroundTimeMs), color = TextSecondary, fontSize = 12.sp)
-        }
-        Spacer(Modifier.width(8.dp))
-        StatusChip("${String.format(Locale.US, "%.1f", entry.percentOfTrackedUsage)}%", SoftPrimary)
+                .fillMaxWidth(progress.coerceIn(0.04f, 1f))
+                .height(5.dp)
+                .background(Brush.linearGradient(listOf(PrimaryBlue, Cyan)))
+        )
+    }
+}
+
+@Composable
+private fun UsageMiniStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(AmoledBlack.copy(alpha = 0.42f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Text(label, color = TextSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = TextMain, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1295,29 +1569,24 @@ private fun FeatureMatrixCard(controller: PowerMateViewModel) {
 
 @Composable
 private fun NavGlyph(tab: Tab, selected: Boolean) {
-    val background = if (selected) PrimaryBlue.copy(alpha = 0.95f) else CardElevated
-    val textColor = if (selected) TextMain else TextSecondary
+    val background = if (selected) {
+        Brush.linearGradient(listOf(PrimaryBlue, Cyan.copy(alpha = 0.85f)))
+    } else {
+        Brush.linearGradient(listOf(CardElevated, CardElevated.copy(alpha = 0.72f)))
+    }
+    val iconColor = if (selected) Color.White else TextSecondary
 
     Box(
         modifier = Modifier
-            .size(30.dp)
-            .background(background, RoundedCornerShape(11.dp)),
+            .size(32.dp)
+            .background(background, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = when (tab) {
-                Tab.Home -> "⌂"
-                Tab.Live -> "⚡"
-                Tab.Aod -> "◐"
-                Tab.History -> "↻"
-                Tab.Usage -> "▦"
-                Tab.Settings -> "⚙"
-            },
-            color = textColor,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            softWrap = false
+        Icon(
+            painter = painterResource(id = tab.iconRes),
+            contentDescription = tab.label,
+            tint = iconColor,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -1539,6 +1808,13 @@ private fun buildLiveRecommendation(
     else -> "Charging looks usable. Run a diagnostic on each charger to build a reliable local comparison history."
 }
 
+private fun sensorTruthNote(isReliable: Boolean): String =
+    if (isReliable) {
+        "Values are read locally from Android battery sensors. Wattage is calculated from current × voltage, so it stays honest instead of pretending to read charger IC data."
+    } else {
+        "This phone hides precise current sensors. PowerMate marks those values as unavailable/estimated instead of showing fake hardware numbers."
+    }
+
 private fun temperatureTrendLabel(currentTemp: Float?, sessions: List<ChargingSession>): String {
     val previousMax = sessions.mapNotNull { it.maxTemperatureC }.maxOrNull()
     return when {
@@ -1547,6 +1823,21 @@ private fun temperatureTrendLabel(currentTemp: Float?, sessions: List<ChargingSe
         currentTemp > previousMax + 1.5f -> "Warming"
         currentTemp < previousMax - 2f -> "Cooler"
         else -> "Stable"
+    }
+}
+
+private fun formatRelativeTime(timeMs: Long): String {
+    if (timeMs <= 0L) return "--"
+    val diff = (System.currentTimeMillis() - timeMs).coerceAtLeast(0L)
+    val minutes = diff / 60_000L
+    val hours = minutes / 60L
+    val days = hours / 24L
+    return when {
+        minutes < 1 -> "Now"
+        minutes < 60 -> "${minutes}m"
+        hours < 24 -> "${hours}h"
+        days < 7 -> "${days}d"
+        else -> formatTime(timeMs)
     }
 }
 

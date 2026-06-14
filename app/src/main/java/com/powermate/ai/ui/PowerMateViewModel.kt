@@ -92,7 +92,7 @@ class PowerMateViewModel(
     fun refreshAppUsageNow() {
         hasUsageStatsAccess = appUsageStatsManager.hasUsageAccess()
         appUsageEntries = if (hasUsageStatsAccess) {
-            appUsageStatsManager.topAppsSince(hours = 24, limit = 8)
+            appUsageStatsManager.topAppsSince(hours = 24, limit = 12)
         } else {
             emptyList()
         }
@@ -101,7 +101,7 @@ class PowerMateViewModel(
 
     private fun refreshAppUsageIfNeeded() {
         val now = System.currentTimeMillis()
-        if (now - lastUsageRefreshAt >= 30_000L) {
+        if (now - lastUsageRefreshAt >= 10_000L) {
             refreshAppUsageNow()
         }
     }
