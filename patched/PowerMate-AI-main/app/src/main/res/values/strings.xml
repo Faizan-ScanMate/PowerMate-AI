@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">PowerMate AI</string>
+    <string name="battery_widget_name">PowerMate Battery</string>
+    <string name="battery_widget_desc">Shows battery level and charging status.</string>
+    <string name="charging_speed_widget_name">PowerMate Charging Speed</string>
+    <string name="charging_speed_widget_desc">Shows charging wattage, current and plug type.</string>
+    <string name="battery_health_widget_name">PowerMate Battery Care</string>
+    <string name="battery_health_widget_desc">Shows battery care score and thermal risk.</string>
+    <string name="aod_launcher_widget_name">PowerMate AOD Launcher</string>
+    <string name="aod_launcher_widget_desc">Opens the AMOLED charging display.</string>
+</resources>
