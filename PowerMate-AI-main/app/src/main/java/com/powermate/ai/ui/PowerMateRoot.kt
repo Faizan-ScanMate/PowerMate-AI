@@ -1,8 +1,11 @@
 package com.powermate.ai.ui
 
 import android.content.Intent
+import android.graphics.Color as AndroidColor
 import com.powermate.ai.R
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -765,7 +768,11 @@ private fun LooksScreen(controller: PowerMateViewModel, padding: PaddingValues) 
             )
         }
 
-        item { LooksThemeGallery() }
+        item { LooksThemeGallery(controller) }
+
+        item { AccentColorSection(controller) }
+
+        item { FontSizeSection(controller) }
 
         item {
             AodStylePreviewSection(controller)
@@ -848,57 +855,182 @@ private fun LooksScreen(controller: PowerMateViewModel, padding: PaddingValues) 
 }
 
 @Composable
-private fun LooksThemeGallery() {
+private fun LooksThemeGallery(controller: PowerMateViewModel) {
+    val themes = listOf(
+        Triple("PowerBlue", "Default — clean and sharp", listOf(Color(0xFF00B4D8), Color(0xFF0077B6))),
+        Triple("Neon Pulse", "High contrast glow", listOf(Color(0xFF39FF14), Color(0xFF00B4D8))),
+        Triple("AMOLED Black", "Deep OLED, pure dark", listOf(Color(0xFF000000), Color(0xFF7B2FBE))),
+        Triple("Ember Red", "Bold and energetic", listOf(Color(0xFFFF4D4D), Color(0xFFFF9F1C))),
+        Triple("Clean White", "Light and readable", listOf(Color(0xFFF5F8FF), Color(0xFF0077B6))),
+        Triple("Midnight Purple", "Premium dark look", listOf(Color(0xFF7B2FBE), Color(0xFF00B4D8)))
+    )
+
     SectionCard {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Looks studio", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Premium visual presets without heavy dependencies", color = TextSecondary, fontSize = 12.sp)
+                Text("Theme preset", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Tap to apply — changes immediately", color = TextSecondary, fontSize = 12.sp)
             }
             StatusChip("Free", SuccessGreen)
         }
 
         Spacer(Modifier.height(12.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            LookPresetCard("Power Blue", "Clean default", PrimaryBlue, Cyan, Modifier.weight(1f))
-            LookPresetCard("Neon Pulse", "Charging glow", SuccessGreen, Cyan, Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            LookPresetCard("AMOLED Black", "Deep OLED", Color.Black, SoftPrimary, Modifier.weight(1f))
-            LookPresetCard("Clean Light", "Readable cards", Color(0xFFF5F8FF), PrimaryBlue, Modifier.weight(1f))
+        themes.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { (name, subtitle, colors) ->
+                    val isSelected = controller.settings.selectedThemePreset == name
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 118.dp)
+                            .background(
+                                if (isSelected) CardElevated else CardElevated.copy(alpha = 0.55f),
+                                RoundedCornerShape(22.dp)
+                            )
+                            .border(
+                                width = if (isSelected) 2.dp else 0.dp,
+                                color = if (isSelected) Cyan else Color.Transparent,
+                                shape = RoundedCornerShape(22.dp)
+                            )
+                            .clickable {
+                                controller.updateSettings {
+                                    it.copy(
+                                        selectedThemePreset = name,
+                                        accentColorHex = "#%06X".format(colors[0].value.toLong() and 0xFFFFFF),
+                                        amoledMode = name == "AMOLED Black"
+                                    )
+                                }
+                            }
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Brush.linearGradient(colors))
+                        ) {
+                            if (isSelected) {
+                                Text(
+                                    "✓",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Column {
+                            Text(name, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(subtitle, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(10.dp))
         }
     }
 }
 
 @Composable
-private fun LookPresetCard(
-    title: String,
-    subtitle: String,
-    base: Color,
-    accent: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .heightIn(min = 118.dp)
-            .background(CardElevated.copy(alpha = 0.72f), RoundedCornerShape(22.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(42.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Brush.linearGradient(listOf(base, accent.copy(alpha = 0.72f))))
-        )
-        Column {
-            Text(title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun FontSizeSection(controller: PowerMateViewModel) {
+    val scales = listOf(
+        Triple(0.85f, "Small", "Compact — more info fits"),
+        Triple(1.0f, "Default", "Balanced and readable"),
+        Triple(1.15f, "Large", "Easier to read at a glance"),
+        Triple(1.3f, "XL", "Maximum readability")
+    )
+    SectionCard {
+        Text("Text size", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Affects all labels and values", color = TextSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            scales.forEach { (scale, label, _) ->
+                val isSelected = controller.settings.fontScale == scale
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (isSelected) PrimaryBlue.copy(alpha = 0.25f) else CardElevated.copy(alpha = 0.5f),
+                            RoundedCornerShape(14.dp)
+                        )
+                        .border(
+                            width = if (isSelected) 2.dp else 0.dp,
+                            color = if (isSelected) Cyan else Color.Transparent,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable { controller.updateSettings { it.copy(fontScale = scale) } }
+                        .padding(vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Aa",
+                        color = if (isSelected) Cyan else TextSecondary,
+                        fontSize = (14 * scale).sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(label, color = if (isSelected) TextMain else TextSecondary, fontSize = 11.sp)
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun AccentColorSection(controller: PowerMateViewModel) {
+    val colors = listOf(
+        Pair("#00B4D8", "Cyan"),
+        Pair("#39FF14", "Neon Green"),
+        Pair("#FF4D4D", "Red"),
+        Pair("#FF9F1C", "Orange"),
+        Pair("#7B2FBE", "Purple"),
+        Pair("#FFFFFF", "White"),
+        Pair("#FFD700", "Gold"),
+        Pair("#00F5D4", "Mint")
+    )
+    SectionCard {
+        Text("Accent colour", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Used on values, rings and highlights", color = TextSecondary, fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            colors.forEach { (hex, label) ->
+                val colorVal = Color(AndroidColor.parseColor(hex))
+                val isSelected = controller.settings.accentColorHex.equals(hex, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(colorVal, RoundedCornerShape(50))
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = if (isSelected) Color.White else Color.Transparent,
+                            shape = RoundedCornerShape(50)
+                        )
+                        .clickable {
+                            controller.updateSettings { it.copy(accentColorHex = hex) }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Text("✓", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Selected: ${colors.firstOrNull { it.first.equals(controller.settings.accentColorHex, ignoreCase = true) }?.second ?: "Custom"}",
+            color = TextSecondary, fontSize = 12.sp
+        )
+    }
+}
 }
 
 @Composable

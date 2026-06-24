@@ -164,5 +164,11 @@ data class AppSettings(
     val showCapacityOnDashboard: Boolean = false,
     val showTimeToFullOnDashboard: Boolean = true,
     val dashboardCompactMode: Boolean = false,
-    val aodPrimaryMetric: String = "percent"
+    val aodPrimaryMetric: String = "percent",
+    // Looks / Theme customization
+    val selectedThemePreset: String = "PowerBlue",
+    val accentColorHex: String = "#00B4D8",
+    val cardColorHex: String = "#1A1A2E",
+    val fontScale: Float = 1.0f,
+    val selectedFontStyle: String = "Default"
 )

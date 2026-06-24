@@ -38,7 +38,12 @@ class PowerMatePreferences(context: Context) {
         showCapacityOnDashboard = prefs.getBoolean("showCapacityOnDashboard", false),
         showTimeToFullOnDashboard = prefs.getBoolean("showTimeToFullOnDashboard", true),
         dashboardCompactMode = prefs.getBoolean("dashboardCompactMode", false),
-        aodPrimaryMetric = prefs.getString("aodPrimaryMetric", "percent") ?: "percent"
+        aodPrimaryMetric = prefs.getString("aodPrimaryMetric", "percent") ?: "percent",
+        selectedThemePreset = prefs.getString("selectedThemePreset", "PowerBlue") ?: "PowerBlue",
+        accentColorHex = prefs.getString("accentColorHex", "#00B4D8") ?: "#00B4D8",
+        cardColorHex = prefs.getString("cardColorHex", "#1A1A2E") ?: "#1A1A2E",
+        fontScale = prefs.getFloat("fontScale", 1.0f),
+        selectedFontStyle = prefs.getString("selectedFontStyle", "Default") ?: "Default"
     )
 
     fun save(settings: AppSettings) {
@@ -73,6 +78,11 @@ class PowerMatePreferences(context: Context) {
             .putBoolean("showTimeToFullOnDashboard", settings.showTimeToFullOnDashboard)
             .putBoolean("dashboardCompactMode", settings.dashboardCompactMode)
             .putString("aodPrimaryMetric", settings.aodPrimaryMetric)
+            .putString("selectedThemePreset", settings.selectedThemePreset)
+            .putString("accentColorHex", settings.accentColorHex)
+            .putString("cardColorHex", settings.cardColorHex)
+            .putFloat("fontScale", settings.fontScale)
+            .putString("selectedFontStyle", settings.selectedFontStyle)
             .apply()
     }
 

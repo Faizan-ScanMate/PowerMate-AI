@@ -83,10 +83,10 @@ class AppUsageStatsManager(private val context: Context) {
                 iconBitmap = packageManager.safeIconBitmap(packageName),
                 todayTimeMs = todayMs,
                 last24hTimeMs = last24hMs,
-                categoryLabel = categoryLabel(appInfo),
+                categoryLabel = categoryLabel(appInfo, packageName),
                 launchCount = launches,
                 isSystemApp = isSystemPackage(packageName, appInfo),
-                drainHint = buildDrainHint(foregroundMs, launches, categoryLabel(appInfo))
+                drainHint = buildDrainHint(foregroundMs, launches, categoryLabel(appInfo, packageName))
             )
         }.sortedByDescending { it.last24hTimeMs }
 
@@ -197,15 +197,72 @@ class AppUsageStatsManager(private val context: Context) {
     }.getOrNull()
 
     private fun isSystemPackage(packageName: String, info: ApplicationInfo): Boolean {
+        // Never filter user-visible apps — even if they are system-signed
+        val knownUserApps = setOf(
+            "com.google.android.youtube",
+            "com.instagram.android",
+            "com.facebook.katana",
+            "com.facebook.lite",
+            "com.twitter.android",
+            "com.snapchat.android",
+            "com.whatsapp",
+            "com.tiktok.android",
+            "com.zhiliaoapp.musically",
+            "com.spotify.music",
+            "com.netflix.mediaclient",
+            "com.google.android.gm",
+            "com.google.android.apps.maps",
+            "com.google.android.apps.photos",
+            "com.samsung.android.app.galaxyfinder",
+            "com.sec.android.app.sbrowser",
+            "com.android.chrome"
+        )
+        if (packageName in knownUserApps) return false
+
+        // Only filter true invisible background processes
+        val invisiblePackages = listOf(
+            "android",
+            "com.android.systemui",
+            "com.android.permissioncontroller",
+            "com.google.android.gms",
+            "com.google.android.gsf",
+            "com.samsung.android.lool",
+            "com.samsung.android.spay",
+            "com.android.vending.billing"
+        )
+        if (invisiblePackages.any { packageName == it }) return true
+
+        // Launchers DO show in usage — Samsung One UI Home is a real app the user sees
+        // Do NOT filter by "launcher" string — that was the bug
+        val hasLaunchIntent = context.packageManager.getLaunchIntentForPackage(packageName) != null
+        if (hasLaunchIntent) return false
+
+        // Filter pure background system processes with no launch intent
         val systemFlag = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-        val knownBackgroundPackage = packageName == "android" ||
-            packageName.contains("systemui", ignoreCase = true) ||
-            packageName.contains("permissioncontroller", ignoreCase = true) ||
-            packageName.contains("launcher", ignoreCase = true)
-        return systemFlag || knownBackgroundPackage
+        val noLaunchIntent = context.packageManager.getLaunchIntentForPackage(packageName) == null
+        return systemFlag && noLaunchIntent
     }
 
-    private fun categoryLabel(info: ApplicationInfo): String {
+    private fun categoryLabel(info: ApplicationInfo, packageName: String = ""): String {
+        // Override by known package — system category is often wrong
+        val knownCategories = mapOf(
+            "com.google.android.youtube" to "Video",
+            "com.netflix.mediaclient" to "Video",
+            "com.spotify.music" to "Audio",
+            "com.instagram.android" to "Social",
+            "com.facebook.katana" to "Social",
+            "com.facebook.lite" to "Social",
+            "com.twitter.android" to "Social",
+            "com.snapchat.android" to "Social",
+            "com.whatsapp" to "Social",
+            "com.tiktok.android" to "Video",
+            "com.zhiliaoapp.musically" to "Video",
+            "com.google.android.apps.maps" to "Maps",
+            "com.android.chrome" to "App",
+            "com.sec.android.app.sbrowser" to "App"
+        )
+        knownCategories[packageName]?.let { return it }
+
         return when (info.category) {
             ApplicationInfo.CATEGORY_GAME -> "Game"
             ApplicationInfo.CATEGORY_AUDIO -> "Audio"
