@@ -30,7 +30,7 @@ class ChargingCoach {
         val temp = snapshot.temperatureCelsius
         if ((temp != null && temp >= 38f) || snapshot.health == BatteryHealthStatus.Overheat) {
             suggestions += OptimizationSuggestion(
-                title = "Phone is running hot — charging is being throttled",
+                title = "Cool down: phone is running hot — charging is throttled",
                 reason = "Above 38°C your phone deliberately slows charging to protect the battery. Remove the case and close heavy apps until it cools.",
                 actionLabel = "Open display",
                 actionType = OptimizationActionType.DisplaySettings,
@@ -41,7 +41,7 @@ class ChargingCoach {
 
         if (snapshot.isCharging && snapshot.status == ChargingStatus.SlowCharging) {
             suggestions += OptimizationSuggestion(
-                title = "Weak signal may be fighting your charger",
+                title = "Weak network signal may be fighting your charger",
                 reason = "Mobile data on a poor signal burns more power than a slow charger delivers. Switch to Wi-Fi or enable airplane mode.",
                 actionLabel = "Internet controls",
                 actionType = OptimizationActionType.InternetPanel,
