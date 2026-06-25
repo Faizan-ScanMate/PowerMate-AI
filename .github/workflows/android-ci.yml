@@ -48,7 +48,7 @@ jobs:
           echo "✅ Project structure OK"
 
       - name: Run unit tests
-        run: gradle testDebugUnitTest --no-daemon --stacktrace
+        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
