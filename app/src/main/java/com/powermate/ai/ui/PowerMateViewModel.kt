@@ -22,6 +22,7 @@ import com.powermate.ai.domain.model.ChargingSession
 import com.powermate.ai.domain.model.DiagnosticResult
 import com.powermate.ai.domain.model.OptimizationSuggestion
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,7 +70,6 @@ class PowerMateViewModel(
     private var lastUsageRefreshAt = 0L
 
     init {
-        // Load history off the main thread; UI starts with an empty list and fills in once ready.
         viewModelScope.launch {
             val loaded = withContext(Dispatchers.IO) { repository.recentSessions() }
             sessions = loaded
@@ -84,9 +84,13 @@ class PowerMateViewModel(
      * polling forever regardless of visibility.
      */
     suspend fun runRefreshLoop() {
-        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-            refresh()
-            kotlinx.coroutines.delay(1_000)
+        try {
+            while (true) {
+                refresh()
+                kotlinx.coroutines.delay(1_000)
+            }
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            // Normal cancellation — loop exits cleanly when the coroutine is cancelled
         }
     }
 
