@@ -23,7 +23,6 @@ import com.powermate.ai.domain.model.DiagnosticResult
 import com.powermate.ai.domain.model.OptimizationSuggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -85,7 +84,7 @@ class PowerMateViewModel(
      * polling forever regardless of visibility.
      */
     suspend fun runRefreshLoop() {
-        while (isActive) {
+        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
             refresh()
             kotlinx.coroutines.delay(1_000)
         }
