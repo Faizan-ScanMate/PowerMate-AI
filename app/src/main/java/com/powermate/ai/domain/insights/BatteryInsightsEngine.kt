@@ -18,7 +18,8 @@ data class AdvancedBatteryInsights(
     val bestChargerScore: Int?,
     val slowestChargerWarning: String?,
     val headline: String,
-    val details: List<String>
+    val details: List<String>,
+    val screenOffDrainLabel: String = "N/A"
 )
 
 class BatteryInsightsEngine {
@@ -61,6 +62,12 @@ class BatteryInsightsEngine {
             if (!snapshot.isSensorReliable) add("Current sensor unavailable; PowerMate will avoid fake precision.")
         }
 
+        val screenOffDrain = if (!snapshot.isCharging) {
+            snapshot.currentMilliAmp?.let { "${it.toInt()} mA" } ?: "N/A"
+        } else {
+            "N/A"
+        }
+
         return AdvancedBatteryInsights(
             chargingHealthScore = chargingHealthScore,
             batteryCareScore = batteryCareScore,
@@ -72,7 +79,8 @@ class BatteryInsightsEngine {
             bestChargerScore = bestCharger,
             slowestChargerWarning = slowestWarning,
             headline = headline,
-            details = details
+            details = details,
+            screenOffDrainLabel = screenOffDrain
         )
     }
 
